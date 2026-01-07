@@ -1,0 +1,766 @@
+<!--
+Stanescu Map Projection
+Copyright 2025 Constantin-Ciprian Stanescu
+Licensed under the ISC License.
+
+Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED “AS IS” AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ -->
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Stanescu Map Projection</title>
+	<style>
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+			background-color: #fff;
+			color: #333;
+			margin: 0;
+			padding: 20px;
+			text-align: center;
+		}
+
+		h1 {
+			margin-top: 0;
+			margin-bottom: 0;
+			font-size: 1.5em;
+		}
+
+		.description {
+			font-size: 0.9em;
+		}
+
+		#map-container {
+			margin: 0 auto;
+			background: #fff;
+		}
+
+		svg {
+			width: 100%;
+			display: block;
+		}
+
+		.countries {
+			fill: none;
+			stroke: #888;
+			stroke-width: 1px;
+			stroke-opacity: 1;
+		}
+
+		.loading {
+			font-size: 1.2em;
+			color: #888;
+			padding: 50px;
+		}
+
+		#faces_label #preview3D {
+			//height:1em; 
+			display: none;
+			position: absolute;
+			margin-top: -128px;
+			background-image: none;
+		}
+
+		#faces_label:hover #preview3D {
+			display: inherit;
+			background-image: url("octahedron_animation.gif");
+			width: 128px;
+			height: 128px;
+		}
+
+
+		#preview3Dlabel:hover {
+			text-decoration: underline;
+		}
+
+		#preview3Dlabel #preview3Dsmall {
+			display: none;
+			position: absolute;
+			margin-top: 20px;
+			background-image: none;
+		}
+
+		#preview3Dlabel:hover #preview3Dsmall {
+			display: inherit;
+			background-image: url("octahedron_animation.gif");
+			width: 128px;
+			height: 128px;
+		}
+	</style>
+</head>
+
+<body>
+	<h1>Stanescu Map Projection</h1>
+	<p class="description">
+		A compromise map projection made by Constantin-Ciprian Stanescu on December 25, 2025,
+
+		<br>based on a <a href="https://en.wikipedia.org/wiki/Regular_octahedron" target="_blank">regular octahedron</a> layout
+		similar to <a href="https://en.wikipedia.org/wiki/Bernard_J._S._Cahill" target="_blank">Cahill's "Butterfly"</a>,
+		and <a href="https://en.wikipedia.org/wiki/Cahill%E2%80%93Keyes_projection" target="_blank">Keyes' "M-shaped"</a> projections,
+		but targeting the simplicity and familiarity of the <a href="https://en.wikipedia.org/wiki/Mercator_projection" target="_blank">Mercator</a> projection.
+
+		<br>Principal dividing meridian is <span id="cutMeridian">0</span>°W, to show almost all the continents and countries uninterrupted.
+		Map ratio is 1:<span id="heightWidthRatio">0</span>.
+		Printed & cropped 2D map can be folded into a <span id="preview3Dlabel"><img id="preview3Dsmall" />3D octahedron Earth</span>.
+	</p>
+
+	<div id="map-container">
+		<div class="loading">Loading Map Data...</div>
+	</div>
+
+	<!-- Load D3.js and dependencies from CDN -->
+	<script src="https://d3js.org/d3.v6.min.js"></script>
+	<script src="https://d3js.org/topojson.v3.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/d3-array@3"></script>
+	<script src="https://cdn.jsdelivr.net/npm/d3-geo@3"></script>
+	<script src="https://cdn.jsdelivr.net/npm/d3-geo-projection@4"></script>
+	<script src="https://cdn.jsdelivr.net/npm/d3-geo-polygon@1.9"></script>
+
+	<script>
+		const abs = Math.abs;
+
+		const cutMeridian = -25; //-22.5;//degrees west of Greenwich
+
+		const scale = 2000;//smaller: thicker contour
+		const heightWidthRatio = 0.3470; //0.3464 without edge //approximate ratio based on the octahedron layout
+		const width = 1 * scale;
+		const height = heightWidthRatio * scale;
+
+		const urlParams = new URLSearchParams(window.location.search);
+
+		const showEdge = urlParams.get('edge') === 'on';
+		const showOutline = urlParams.get('outline') === 'on';
+		const showGraticule = urlParams.get('graticule') === 'on';
+		const showCountries = urlParams.get('countries') === 'on';
+		const showCountriesColors = urlParams.get('countries_colors') === 'on';
+		const showCountriesLabels = urlParams.get('countries_labels') === 'on';
+		const showDistortions = urlParams.get('distortions') === 'on';
+		const showFaces = urlParams.get('faces') === 'on';
+
+		const graticuleStep = showDistortions ? 10 : 45;
+
+		// Select container and clear loading text
+		const container = d3.select("#map-container");
+
+		// Create SVG
+		const svg = container.append("svg")
+			.attr("viewBox", `0 0 ${width} ${height}`)
+			.attr("preserveAspectRatio", "xMidYMid meet")
+			.attr("id", "generated_svg")
+			;
+
+		//from https://github.com/d3/d3-geo-polygon?tab=readme-ov-file
+		//from https://github.com/d3/d3-geo-projection
+		//from https://d3js.org/d3-geo/cylindrical
+
+		getCustomProjection = function (n) {
+			const octahedron2D = [
+				[0, 90],
+				[-90, 0], [0, 0], [90, 0], [180, 0],
+				[0, -90]
+			];
+			//console.log('octahedron2D=',octahedron2D);
+
+			octahedron3D = [
+				[0, 2, 1],//0
+				[0, 3, 2],//1
+				[5, 1, 2],//2
+				[5, 2, 3],//3
+				[0, 1, 4],//4
+				[0, 4, 3],//5
+				[5, 4, 1],//6
+				[5, 3, 4] //7
+			].map(function (face) {
+				//console.log('face=',face);
+				return face.map(function (i) {
+					//console.log('octahedron2D['+i+']=',octahedron2D[i]);
+					return octahedron2D[i]
+				})
+			});
+			//console.log('octahedron3D=',octahedron3D);
+
+
+			PI = Math.PI;
+
+			//geoPolyhedralButterfly
+
+			faceProjection = function (face) {
+				var c = d3.geoCentroid({ type: "MultiPoint", coordinates: face });
+				return d3.geoGnomonic().rotate([-c[0], -c[1]])
+			};
+
+			var faces = octahedron3D.map(function (face) {
+				return { face: face, project: faceProjection(face) }
+			});
+			//console.log('faces1=',faces);
+
+
+			//[ 0, 1, 2, 3, 4, 5, 6, 7]//is child of:
+			//[-1, 0, 0, 1, 0, 1, 4, 5]//butterfly from https://github.com/d3/d3-geo-polygon/blob/main/src/butterfly.js or https://github.com/d3/d3-geo-projection/blob/main/src/polyhedral/butterfly.js
+			//[-1, 3, 0, 2, 0, 1, 4, 5]//cahill    from https://github.com/d3/d3-geo-polygon/blob/main/src/cahillKeyes.js
+			[-1, 3, 0, 2, 0, 1, 7, 5]//me
+				//[ 4, 3, 0, 2,-1, 1, 7, 5]//me2 does not render parents of [0] ([4])
+				.forEach(function (d, i) {
+					//console.log('d=',d,'i=',i);
+					var node = faces[d];
+					node && (node.children || (node.children = [])).push(faces[i])
+				});
+			//console.log('faces2=',faces);
+
+
+			var polyhedral = d3.geoPolyhedral(
+				faces[0],
+				function (lambdaLon, phiLat) {
+					//console.log('lambdaLon=',lambdaLon,'phiLat=',phiLat);
+					return faces[
+						lambdaLon < -PI / 2 ? phiLat < 0 ? 6 : 4
+							: lambdaLon < 0 ? phiLat < 0 ? 2 : 0
+								: lambdaLon < PI / 2 ? phiLat < 0 ? 3 : 1
+									: phiLat < 0 ? 7 : 5
+					]
+				}
+			);
+			//console.log('polyhedral/projection=',polyhedral);
+			return polyhedral
+		};
+
+		function getHex(h, s, b) {//h: 0 - 360 (degrees) 
+			const f = (n) => {
+				const k = (n + h / 60) % 6;
+				const color = b * (1 - s * Math.max(0, Math.min(k, 4 - k, 1)));
+				return Math.round(255 * color).toString(16).padStart(2, '0');
+			};
+
+			return `#${f(5)}${f(3)}${f(1)}`;
+		}
+
+		function adjustName(name) {
+			if (name == "Central African Rep.") return "Central African R.";
+			if (name == "Dem. Rep. Congo") return "D. R. Congo";
+			if (name == "S. Sudan") return "S.Sudan";
+			if (name == "United Arab Emirates") return "United Arab E.";
+			if (name == "Macedonia") return "Mac.";
+			if (name == "Albania") return "A.";
+			if (name == "Kosovo") return "K.";
+			if (name == "Montenegro") return "M.";
+			if (name == "Bosnia and Herz.") return "B&H";
+			if (name == "Slovenia") return "Slo.";
+			if (name == "Switzerland") return "Swit.";
+			if (name == "Belgium") return "Bel.";
+			if (name == "Netherlands") return "Neth.";
+			if (name == "Denmark") return "Den.";
+			if (name == "Moldova") return "M.";
+			if (name == "Estonia") return "Est.";
+			if (name == "Lithuania") return "Lith.";
+			if (name == "Gambia") return "Ga.";
+			if (name == "Guinea-Bissau") return "Gu.B.";
+			if (name == "Serbia") return "Ser.";
+			if (name == "Israel") return "Is.";
+			if (name == "Jordan") return "Jo.";
+			if (name == "Brunei") return "B.";
+			if (name == "Eq. Guinea") return "E.G.";
+			if (name == "Rwanda") return "Rw.";
+			if (name == "Burundi") return "Bu.";
+			if (name == "Djibouti") return "Dji.";
+			if (name == "eSwatini") return "Sw.";
+			if (name == "Lesotho") return "Le.";
+			if (name == "Armenia") return "Ar.";
+			if (name == "Azerbaijan") return "Azerb.";
+			if (name == "North Korea") return "N.Korea";
+			if (name == "South Korea") return "S.Korea";
+			if (name == "Dominican Rep.") return "Dominican R.";
+			//if(name=="United Kingdom") return "U.K.";
+			//if(name=="Antarctica") return "Antarctica . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . Antarctica";
+			return name;
+		}
+
+		hue = 0;
+		function adjustColor(d) {
+			var countryName = d.properties.name;
+
+			//hue=Math.random() * 360;
+			hue += 30;
+			if (hue >= 360) hue -= 360;
+			var color = getHex(hue, 0.3, 1);
+
+			if (["Antarctica", "Greenland", "Siachen Glacier"].includes(countryName)) {
+				color = "#FFFFFF";
+			}
+			return color;
+		}
+
+		//const projection = d3.geoCahillKeyes()
+		//const projection = d3.geoPolyhedralButterfly()
+		const projection = getCustomProjection();
+		//console.log('projection=', projection);
+
+		projection
+			.rotate([-cutMeridian, 0.000000001])// pan the map inside the tringles
+			.scale(0.65)//scale the final map
+			.center([13, 13])//pan the final map
+			.angle(30)
+			.fitSize([width, height], { type: "Sphere" })
+			;
+		const path = d3.geoPath(projection);
+
+		// Load World Topography Data
+		// from https://github.com/topojson/world-atlas
+		//var mapUrl="https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json";
+		//var mapUrl="https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json";
+		var mapUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json";
+		d3.json(mapUrl).then(world => {
+			// Remove loading text
+			container.select(".loading").remove();
+
+			// Convert TopoJSON to GeoJSON features
+			const countries = topojson.feature(world, world.objects.countries).features;
+
+			const gridColor = "#808080";
+			const oceanColor = "#c8ebff";
+			const oceanColorLight = "#f0f8ff";
+			const landColor = "#fefee4";
+			const borderColor = "#0978ab";
+			const distortionColor = "#ff480099";
+
+			// map / ocean background and outline
+			svg
+				.append("path")
+				.datum({ type: "Sphere" })
+				//.attr("class", "sphere")
+				.attr("d", path)
+				.style("fill", showCountriesColors ? oceanColorLight : oceanColor)
+				.style("stroke", gridColor)
+				.style("stroke-width", showEdge ? "1px" : "0px")
+				;
+
+
+			if (showCountries) {
+				if (showCountriesColors) {
+
+					//each country border
+					world.objects.countries.geometries.forEach(function (v, i) {
+						//var countryId=v.id;
+						var countryName = v.properties.name;
+
+						var color = adjustColor(v);
+
+						if (["Antarctica", "Greenland", "Siachen Glacier"].includes(countryName)) {
+							color = "#FFFFFF";
+						}
+
+						//console.log('id:', countryId, countryName, v);
+
+						svg
+							.append("path")
+							.datum(topojson.feature(world, v))
+							.attr("d", path)
+							.attr("style", "fill:" + color)
+							.attr("stroke", gridColor)
+							.attr("stroke-width", showOutline ? "0.5px" : "0px")
+							;
+					});
+
+
+					//COMMENTED AS IT REMOVES EVEYTHING DRAWN BEFORE
+					//Draw all countries with colors in a single path
+					/*svg
+						.selectAll("path")
+						.data(countries)
+						.join("path")
+						.attr("d", path)
+						.style("fill", d => adjustColor(d))
+						.style("stroke", gridColor)
+						.style("stroke-width", "1px")
+						.style("stroke-dasharray", showOutline ? "" : "1,4")
+						;*/
+
+				} else {
+					// Draw countries outline
+					svg.append("path")
+						.datum(topojson.feature(world, world.objects.countries))
+						// .attr("class", "countries")
+						.attr("d", path)
+						.style("fill", landColor)
+						.style("stroke", gridColor)
+						.style("stroke-width", "1px")
+						.style("stroke-dasharray", showOutline ? "" : "1,4")
+						;
+
+				}
+
+			} else {
+
+				// Draw Land Masses
+				svg.append("path")
+					.datum(topojson.feature(world, world.objects.land))
+					//.attr("class", "land")
+					.attr("d", path)
+					.style("fill", landColor)
+					.style("stroke", borderColor)
+					.style("stroke-width", showOutline ? "1px" : "0px")
+					;
+			}
+
+			// lon+lat grid
+			//from https://d3js.org/d3-geo/shape
+			//from https://github.com/d3/d3-geo/blob/main/src/graticule.js
+			if (showGraticule) {
+				const graticule = d3.geoGraticule().step([graticuleStep, graticuleStep]);//lon, lat: 45, 45 or 10, 10
+				svg
+					.append("path")
+					.datum(graticule)
+					.attr("d", path)
+					//.attr("class", "graticule")
+					.style("fill", "none")
+					.style("stroke", gridColor)
+					.style("stroke-width", "0.3px")
+					.style("stroke-opacity", "1")
+					;
+			}
+
+			if (showCountriesLabels) {
+				// country names
+				svg
+					.selectAll("text")
+					.data(countries)
+					.join("text")
+					.text(d => adjustName(d.properties.name))  // Get the name property
+					.attr("transform", d => `translate(${path.centroid(d)})`) // Position at center
+					.attr("text-anchor", "middle") // Center horizontally
+					.attr("dy", ".35em")           // Center vertically
+					.style("font-size", "0.15em")
+					.style("font-family", "sans-serif")
+					.style("display", d => path.area(d) > 10 ? "block" : "none")
+					.attr("font-weight", "bold")
+					;
+			}
+
+			function getMapLine(lonLat1, lonLat2) {
+				return [[lonLat1, lonLat2, lonLat1]];
+			}
+			function addLonEdge(coordinates, lon, lat) {
+				coordinates.push(getMapLine([lon, lat], [lon, 0]));
+			}
+			function addLatEdge(coordinates, lon1, lon2) {
+				coordinates.push(getMapLine([lon1, 0], [lon2, 0]));
+			}
+
+
+			if (showFaces) {//lon, lat
+				const faceEdges = function () {
+					coordinates = [];
+
+					addLonEdge(coordinates, cutMeridian - 90, 90)
+					addLonEdge(coordinates, cutMeridian, -90);
+					addLonEdge(coordinates, cutMeridian + 90, 90)
+					addLonEdge(coordinates, cutMeridian + 180, -90);
+
+					addLatEdge(coordinates, cutMeridian - 90, cutMeridian)
+					addLatEdge(coordinates, cutMeridian, cutMeridian + 90);
+					addLatEdge(coordinates, cutMeridian + 90, cutMeridian + 180)
+
+					return { type: "MultiPolygon", coordinates };
+				}();
+				svg
+					.append("path")
+					.datum(faceEdges)
+					.attr("d", path)
+					.style("fill", "none")
+					.style("stroke", gridColor)
+					.style("stroke-width", "0.3px")
+					.style("stroke-opacity", "1")
+					;
+			}
+
+			if (showDistortions) {
+				// Draw circles
+				circles = function () {
+					const stepX = 360 / 12;//=30
+					const stepY = 25;
+					const circle = d3.geoCircle().center(d => d).radius(5).precision(10);
+					const coordinates = [];
+					const maxY = stepY * 2.5;
+					for (let y = -maxY; y <= maxY; y += stepY) {
+						for (let x = -180; x < 180; x += stepX) {
+							coordinates.push(circle([x + cutMeridian + stepX / 2, y]).coordinates);
+						}
+					}
+					return { type: "MultiPolygon", coordinates };
+				}();
+				/*circles = function () {
+					const stepX = 360 / 12;//=30
+					const stepY = 30;
+					const circle = d3.geoCircle().center(d => d).radius(5).precision(10);
+					const coordinates = [];
+					const maxY = stepY * 2.5;
+					for (let y = -maxY; y <= maxY; y += stepY) {
+						for (let x = -180; x < 180; x += stepX) {
+							console.log('x=',x);
+							const mX=abs(x % 90);
+							console.log('mX=',mX);
+							if (abs(y) == 75 && mX != 30) continue;//skip
+							coordinates.push(circle([x + cutMeridian + stepX / 2, y]).coordinates);
+						}
+					}
+					return { type: "MultiPolygon", coordinates };
+				}();*/
+				/*circles = function () { //same as https://upload.wikimedia.org/wikipedia/commons/a/af/Cahill-Keyes_with_Tissot%27s_Indicatrices_of_Distortion.svg
+					const stepX = 30;
+					const stepY = 30;
+					const circle = d3.geoCircle().center(d => d).radius(5).precision(10);
+					const coordinates = [];
+					const maxY = 90;
+					for (let y = -maxY; y <= maxY; y += stepY) {
+						if (y == -90 || y == 90) continue;//skip poles
+						for (let x = -180; x < 180; x += stepX) {
+							if (y == 0 && x % 90 == 0) continue;//skip
+							if (abs(y) == 60 && x % 60 != 0) continue;//skip
+							coordinates.push(circle([x + cutMeridian, y]).coordinates);
+						}
+					}
+					return { type: "MultiPolygon", coordinates };
+				}();*/
+				console.log('circles=', circles);
+				svg.append("path")
+					.datum(circles)
+					.attr("d", path)
+					.style("fill", distortionColor)
+					;
+			}
+
+		}).catch(err => {
+			container.html(`<p style="color:red">Error loading map data: ${err.message}<br>Check your internet connection.</p>`);
+		});
+
+
+		function downloadSVG() {
+			// 1. Get the SVG element from the DOM
+			const svgElement = document.getElementById('generated_svg');
+
+			// 2. Serialize the SVG to a string
+			// XMLSerializer is the standard way to convert a DOM element to a string
+			const serializer = new XMLSerializer();
+			let svgString = serializer.serializeToString(svgElement);
+
+			// 3. Create a Blob object from the SVG string
+			// A Blob is a file-like object of immutable, raw data.
+			const blob = new Blob([svgString], { type: 'image/svg+xml' });
+
+			// 4. Create a temporary URL for the Blob
+			const url = URL.createObjectURL(blob);
+
+			// 5. Create a temporary <a> element to trigger the download
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = 'map.svg'; // The desired file name
+
+			// 6. Programmatically click the link to start the download
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+
+			// 7. Clean up by revoking the temporary URL
+			URL.revokeObjectURL(url);
+		}
+
+		async function downloadPNG() {
+			// 1. Get the SVG element from the DOM
+			const svgElement = document.getElementById('generated_svg');
+
+			// 2. save as PNG string
+			let pngString = await getPngString(svgElement);
+			if (!pngString) return;
+
+			// 3. Create a Blob object from the SVG string
+			// A Blob is a file-like object of immutable, raw data.
+			const blob = new Blob([pngString], { type: 'image/png' });
+
+			// 4. Create a temporary URL for the Blob
+			const url = URL.createObjectURL(blob);
+
+			// 5. Create a temporary <a> element to trigger the download
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = 'map.png'; // The desired file name
+
+			// 6. Programmatically click the link to start the download
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+
+			// 7. Clean up by revoking the temporary URL
+			URL.revokeObjectURL(url);
+		}
+
+		async function getPngString(svgElement) {
+			const viewBox = svgElement.viewBox.baseVal;
+			const vbWidth = viewBox.width;
+			const vbHeight = viewBox.height;
+			let scale = 1;
+
+			dstWidth = prompt("Enter PNG width in pixels:", 16384);
+			if (dstWidth != null && dstWidth > 0) {
+				scale = dstWidth / vbWidth;
+			} else {
+				return;
+			}
+			dstHeight = Math.ceil(dstWidth * vbHeight / vbWidth);
+
+			return new Promise((resolve, reject) => {
+				// Serialize SVG to string
+				const serializer = new XMLSerializer();
+				const svgString = serializer.serializeToString(svgElement);
+
+				// Create a Blob from the SVG string
+				const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
+				const url = URL.createObjectURL(svgBlob);
+
+				// Create an Image object
+				const img = new Image();
+				img.onload = () => {
+					// Create a canvas and draw the image onto it
+					const canvas = document.createElement('canvas');
+					canvas.width = dstWidth;
+					canvas.height = dstHeight;
+					const ctx = canvas.getContext('2d');
+					ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+					// Get the PNG data URL from the canvas
+					canvas.toBlob((blob) => {
+						//on finish saving PNG to blob-file
+
+						//read blob-file content
+						const reader = new FileReader();
+						reader.onloadend = () => {
+							//on finish reading blob-file content
+							resolve(reader.result);
+						};
+						reader.readAsArrayBuffer(blob);
+					}, 'image/png');
+
+					// Clean up
+					URL.revokeObjectURL(url);
+				};
+				img.onerror = (err) => {
+					reject(err);
+				};
+				img.src = url;
+			});
+		}
+
+		function print() {
+			// 1. Create a hidden iframe
+			const iframe = document.createElement('iframe');
+
+			// Make it invisible (but valid) so the browser can render it
+			iframe.style.position = 'absolute';
+			iframe.style.width = '0px';
+			iframe.style.height = '0px';
+			iframe.style.border = 'none';
+
+			// 2. Append it to the body
+			document.body.appendChild(iframe);
+
+			// 3. Get the content you want to print
+			const content = document.getElementById('generated_svg').outerHTML;
+
+			// 4. Open the iframe document to write
+			const doc = iframe.contentWindow.document;
+
+			// 5. Write the HTML
+			// NOTE: If you need styles, you must link your CSS file here!
+			doc.open();
+			doc.write(`
+				<html>
+				<head><title>Print</title></head>
+				<body>${content}</body>
+				</html>
+			`);
+			doc.close();
+
+			// 6. Trigger the print
+			// We use a small timeout to ensure images/styles load before printing
+			iframe.contentWindow.focus();
+			setTimeout(() => {
+				iframe.contentWindow.print();
+
+				// Optional: Remove iframe after printing to clean up
+				// document.body.removeChild(iframe); 
+			}, 500);
+		}
+
+		function initToggle(id, checked = false) {
+			const checkbox = document.getElementById(id + '_toggle');
+			if (!checkbox) throw new Error('Checkbox not found: ' + id + '_toggle');
+
+			checkbox.checked = checked;
+			checkbox.addEventListener('change', () => {
+				const url = new URL(window.location.href);
+				if (checkbox.checked) url.searchParams.set(id, 'on');
+				else {
+					url.searchParams.delete(id);
+					if (id === 'countries') {
+						url.searchParams.delete('countries_colors');
+						url.searchParams.delete('countries_labels');
+					}
+				}
+				window.location.href = url.toString();
+			});
+		}
+
+
+		function disableToggle(id) {
+			const checkbox = document.getElementById(id + '_toggle');
+			checkbox.disabled = true;
+		}
+
+		window.addEventListener('DOMContentLoaded', () => {
+			initToggle('edge', showEdge);
+			initToggle('outline', showOutline);
+			initToggle('graticule', showGraticule);
+			initToggle('countries', showCountries);
+			initToggle('countries', showCountries);
+			initToggle('countries_colors', showCountriesColors);
+			initToggle('countries_labels', showCountriesLabels);
+			initToggle('distortions', showDistortions);
+			initToggle('faces', showFaces);
+
+			if (!showCountries) {
+				disableToggle('countries_colors');
+				disableToggle('countries_labels');
+			}
+		});
+
+	</script>
+
+	<br />
+	<div style="margin-bottom:8px;">
+		<label><input type="checkbox" id="countries_toggle" />countries</label>
+		<label><input type="checkbox" id="countries_colors_toggle" />colors</label>
+		<label><input type="checkbox" id="countries_labels_toggle" />labels</label>
+		<label><input type="checkbox" id="outline_toggle" />outline</label>
+		<label><input type="checkbox" id="graticule_toggle" /><span id="graticuleStep">0</span>° graticule</label>
+		<label><input type="checkbox" id="edge_toggle" />edge</label>
+		<label id="faces_label"><img id="preview3D" /><input type="checkbox" id="faces_toggle" />3D Earth edges</label>
+		<label><input type="checkbox" id="distortions_toggle" />distortions</label> (<a href="https://en.wikipedia.org/wiki/Tissot%27s_indicatrix" target="_blank">Tissot's indicatrix</a>)
+	</div>
+	<div>
+		<button onclick="downloadSVG()">Download SVG</button>
+		<button onclick="downloadPNG()">Download PNG</button>
+		<button onclick="print()">Print</button>
+	</div>
+
+	<script>
+		document.getElementById('cutMeridian').innerText = -cutMeridian;
+		document.getElementById('graticuleStep').innerText = graticuleStep;
+		document.getElementById('heightWidthRatio').innerText = heightWidthRatio;
+	</script>
+
+</body>
+
+</html>
