@@ -1,4 +1,6 @@
 # stanescu-map-projection
+<img src="https://raw.githubusercontent.com/PrimevalAngel/stanescu-map-projection/main/sample-maps/stanescu-map-projection-countries-graticule.png" width="512">
+
 A compromise map projection made by Constantin-Ciprian Stanescu on December 25, 2025,
 <br>based on a <a href="https://en.wikipedia.org/wiki/Regular_octahedron" target="_blank">regular octahedron</a> layout 
 similar to <a href="https://en.wikipedia.org/wiki/Bernard_J._S._Cahill" target="_blank">Cahill's "Butterfly"</a>, 
@@ -8,7 +10,7 @@ of the <a href="https://en.wikipedia.org/wiki/Mercator_projection" target="_blan
 <br>Map ratio is 1:0.347. 
 <br>Printed & cropped 2D map can be folded into a 3D octahedron Earth.
 
-View this project on the <a href="http://oojao.com/stanescu-map-projection/stanescu-map-projection.html" target="_blank">official website</a>.
+View this project and map samples on the <a href="http://oojao.com/stanescu-map-projection/stanescu-map-projection.html" target="_blank">official website</a>.
 
-
-<img src="https://raw.githubusercontent.com/PrimevalAngel/stanescu-map-projection/main/sample-maps/stanescu-map-projection-continents.png" width="512">
+Stanescu projection with Tissot's indicatrix of deformation:
+<img src="https://raw.githubusercontent.com/PrimevalAngel/stanescu-map-projection/main/sample-maps/stanescu-map-projection-tissot-indicatrix.png" width="512">
