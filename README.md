@@ -9,8 +9,8 @@ of the <a href="https://en.wikipedia.org/wiki/Mercator_projection" target="_blan
 <br>Principal dividing meridian is 25°W, to show almost all the continents and countries uninterrupted. 
 <br>Map ratio is 1:0.347. 
 <br>Printed & cropped 2D map can be folded into a 3D octahedron Earth.
-
-View this project and map samples on the <a href="http://oojao.com/stanescu-map-projection/stanescu-map-projection.html" target="_blank">official website</a>.
-
-Stanescu projection with Tissot's indicatrix of deformation:
-<img src="https://raw.githubusercontent.com/PrimevalAngel/stanescu-map-projection/main/sample-maps/stanescu-map-projection-tissot-indicatrix.png" width="512">
+<br>
+<br>Stanescu projection with Tissot's indicatrix of deformation:
+<br><img src="https://raw.githubusercontent.com/PrimevalAngel/stanescu-map-projection/main/sample-maps/stanescu-map-projection-tissot-indicatrix.png" width="512">
+<br>
+<br>View this project and map samples on the <a href="http://oojao.com/stanescu-map-projection/stanescu-map-projection.html" target="_blank">official website</a>.
