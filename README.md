@@ -1,5 +1,5 @@
 # stanescu-map-projection
-A compromise map projection made by Constantin-Ciprian Stanescu on december 25th, 2025,
+A compromise map projection made by Constantin-Ciprian Stanescu on December 25, 2025,
 <br>based on a <a href="https://en.wikipedia.org/wiki/Regular_octahedron" target="_blank">regular octahedron</a> layout 
 similar to <a href="https://en.wikipedia.org/wiki/Bernard_J._S._Cahill" target="_blank">Cahill's "Butterfly"</a>, 
 and <a href="https://en.wikipedia.org/wiki/Cahill%E2%80%93Keyes_projection" target="_blank">Keyes' "M-shaped"</a> projections, but targeting the simplicity and familiarity 
