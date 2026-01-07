@@ -8,4 +8,4 @@ of the <a href="https://en.wikipedia.org/wiki/Mercator_projection" target="_blan
 <br>Map ratio is 1:0.347. 
 <br>Printed & cropped 2D map can be folded into a 3D octahedron Earth.
 
-Go to <a href="http://oojao.com/stanescu-map-projection/stanescu-map-projection.html" target="_blank">official website</a>.
+View this project on the <a href="http://oojao.com/stanescu-map-projection/stanescu-map-projection.html" target="_blank">official website</a>.
