@@ -9,3 +9,6 @@ of the <a href="https://en.wikipedia.org/wiki/Mercator_projection" target="_blan
 <br>Printed & cropped 2D map can be folded into a 3D octahedron Earth.
 
 View this project on the <a href="http://oojao.com/stanescu-map-projection/stanescu-map-projection.html" target="_blank">official website</a>.
+
+
+<img src="https://raw.githubusercontent.com/PrimevalAngel/stanescu-map-projection/main/sample-maps/stanescu-map-projection-continents.png" width="512">
