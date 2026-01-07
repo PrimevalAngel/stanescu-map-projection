@@ -1,2 +1,2 @@
 # stanescu-map-projection
-A compromise map projection made by Constantine-Cyprian Stanescu (Romanian: Constantin-Ciprian Stanescu) on december 25th, 2025
+A compromise map projection made by Constantin-Ciprian Stanescu on december 25th, 2025.
